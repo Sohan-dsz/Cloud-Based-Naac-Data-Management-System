@@ -5,7 +5,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker)
 ![Keycloak](https://img.shields.io/badge/Keycloak-Authentication-EF4444)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+
 
 A **centralized, secure, and cloud-ready platform** designed to streamline **NAAC accreditation data management** for higher education institutions. The system enables efficient document storage, role-based access control, OCR-powered search, analytics dashboards, audit logging, and automated report generation to simplify accreditation workflows.
 
