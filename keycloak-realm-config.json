@@ -1,0 +1,57 @@
+{
+  "realm": "naac-realm",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "naac-client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": [
+        "http://localhost:5174/*",
+        "http://127.0.0.1:5174/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5174",
+        "http://127.0.0.1:5174"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "iqac_admin",
+        "description": "IQAC Administrator"
+      },
+      {
+        "name": "dept_admin",
+        "description": "Department Administrator"
+      },
+      {
+        "name": "faculty",
+        "description": "Faculty Member"
+      },
+      {
+        "name": "student",
+        "description": "Student"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["iqac_admin"]
+    }
+  ]
+}

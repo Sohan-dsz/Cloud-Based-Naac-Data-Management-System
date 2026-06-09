@@ -1,1 +1,0 @@
-# NAAC Data Management System - Main Django Project Package
