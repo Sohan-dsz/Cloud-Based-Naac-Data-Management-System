@@ -16,7 +16,7 @@ const keycloak = new Keycloak({
   onLoad: 'check-sso',
 });
 
-// Set up axios interceptor for auth headers
+// Set up axios interceptor for
 const setupAxiosInterceptors = (keycloak) => {
   axios.interceptors.request.use(
     (config) => {
@@ -28,7 +28,7 @@ const setupAxiosInterceptors = (keycloak) => {
     (error) => Promise.reject(error)
   );
 
-  // Refresh token on 401
+  // Refresh token on
   axios.interceptors.response.use(
     (response) => response,
     async (error) => {
