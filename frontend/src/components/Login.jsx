@@ -11,7 +11,7 @@ const Login = () => {
 
   useEffect(() => {
     if (keycloak.authenticated) {
-      // Sync with backend after Keycloak authentication
+      // Sync with backend after Keycloak 
       syncWithBackend();
     }
   }, [keycloak.authenticated]);
