@@ -10,6 +10,8 @@ const EvidenceDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+
+  
   useEffect(() => {
     if (!keycloak.authenticated) {
       navigate('/');
