@@ -1,172 +1,220 @@
-<div align="center">
+# NAAC Data Management & Accreditation Support System
 
-# 📄 AI-Powered Document Understanding System
+A Django + React platform for colleges to collect, store, search, and report on NAAC accreditation evidence.
 
-### An asynchronous, containerized pipeline that turns uploaded documents into structured, searchable data
+## What this does
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#)
-[![React](https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white)](#)
-[![Celery](https://img.shields.io/badge/Celery-Async%20Jobs-37814A?style=for-the-badge&logo=celery&logoColor=white)](#)
-[![Redis](https://img.shields.io/badge/Redis-Broker-DC382D?style=for-the-badge&logo=redis&logoColor=white)](#)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#)
-[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
+Institutions upload evidence documents (PDFs/images) against NAAC's seven accreditation criteria. The backend runs OCR on each file, stores the original in object storage, and indexes the extracted text for full-text search. IQAC/department admins can approve evidence and generate criterion-wise PDF reports. Every authenticated request is logged for audit purposes, and login/roles are handled through Keycloak SSO.
 
-Document upload&nbsp;•&nbsp;Async OCR & AI extraction&nbsp;•&nbsp;Object storage&nbsp;•&nbsp;CI/CD&nbsp;•&nbsp;Observability
+## Key Features
 
-</div>
+- **Keycloak SSO** — OIDC login via `keycloak-js` on the frontend and token introspection on the backend, with JWT session tokens issued after login
+- **Role-based access** — four roles (IQAC Admin, Department Admin, Faculty, Student) enforced on the `Task` endpoints; other endpoints require authentication only
+- **Evidence & document upload** — files are stored in MinIO, OCR'd with Tesseract, and text-indexed in Meilisearch on upload
+- **Full-text document search** — queries Meilisearch and resolves hits back to `Document` rows
+- **Document approval workflow** — admins mark documents approved before they're included in generated reports
+- **Criterion-wise PDF reports** — generated on demand with ReportLab from approved documents
+- **Audit logging** — a middleware logs every authenticated request (path, IP, user agent), plus explicit log entries for uploads, searches, approvals, and report generation
+- **Task management (backend only)** — assignment and tracking of accreditation-related tasks, scoped by role; no frontend page consumes this yet
+- **Metabase dashboards** — Metabase is wired up against the same Postgres instance with Keycloak OIDC login, for ad hoc analytics
 
----
-
-## 📑 Table of Contents
-
-- [What This Does](#-what-this-does)
-- [Key Features](#-key-features)
-- [Architecture](#-architecture)
-- [System Workflow](#-system-workflow)
-- [Tech Stack](#-tech-stack)
-- [Local Development](#-local-development)
-- [Deployment & CI/CD](#-deployment--cicd)
-- [Monitoring & Logging](#-monitoring--logging)
-- [Why This Setup](#-why-this-setup)
-- [Author](#-author)
-
----
-
-## 🧠 What This Does
-
-A user uploads a document through the React frontend. FastAPI validates it, stores the original in object storage, and pushes a processing job onto a Redis queue. A Celery worker picks the job up, runs it through an OCR/AI pipeline — OpenCV preprocessing, YOLOv8 field detection, EasyOCR for printed text, TrOCR for handwriting, and an LLM step for structured data extraction — and writes the results back to PostgreSQL. The frontend then polls for and displays the extracted data. The whole thing runs as a set of Docker containers, ships through a GitHub Actions CI/CD pipeline, and reports metrics and logs through Prometheus, Grafana, and Loki.
-
-## ✨ Key Features
-
-- **Async processing by design** — uploads return immediately; a Redis-backed Celery queue handles the actual OCR/AI work in the background so the API never blocks
-- **Multi-model extraction pipeline** — OpenCV for preprocessing, YOLOv8 for field/region detection, EasyOCR for printed text, TrOCR for handwritten content, and an LLM pass to turn raw OCR output into structured fields
-- **Object storage with signed URLs** — uploaded originals and processed outputs are stored in an OCI bucket, served back via signed URLs rather than direct public access
-- **Job status tracking** — PostgreSQL tracks users, jobs, results, and logs/metadata, so a client can poll a job until it completes
-- **Secrets kept out of the codebase** — all credentials and config are injected via `.env`, never hardcoded
-- **One-command local environment** — `docker-compose up` brings up the frontend, API, broker, worker, database, and local S3-compatible storage together
-- **CI/CD on every push** — GitHub Actions runs the test suite, builds Docker images, pushes to a registry, and deploys to the OCI server
-- **Full observability** — Prometheus scrapes metrics, Grafana visualizes them, Loki aggregates logs, covering CPU/memory, API latency, error rate, queue length, and uptime
-- **Runs entirely on free/trial tiers** — every service in the stack (OCI storage, Netlify/Cloudflare Pages hosting, GitHub Actions, Prometheus, Grafana) fits a generous free plan
-
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-    User[User - Web Browser] -->|HTTPS| FE[React + Vite Frontend]
-    FE -->|Upload / Poll Results| API[FastAPI - API Server]
-
-    API -->|Auth, Upload, Job Mgmt| DB[(PostgreSQL)]
-    API -->|Store original file| Storage[(OCI Object Storage)]
-    API -->|Push job| Redis[(Redis - Message Broker)]
-
-    Redis -->|Fetch job| Worker[Celery Worker]
-    Worker -->|Preprocess + Detect + Extract| OCR[OCR / AI Service]
-    OCR -->|OpenCV preprocessing| OCR
-    OCR -->|YOLOv8 field detection| OCR
-    OCR -->|EasyOCR - printed text| OCR
-    OCR -->|TrOCR - handwriting| OCR
-    OCR -->|LLM data extraction| OCR
-
-    Worker -->|Store results| DB
-    Worker -->|Store processed output| Storage
-    Worker -->|Update status| Redis
-
-    API -->|Return results| FE
-
-    subgraph Observability
-      Prom[Prometheus]
-      Graf[Grafana]
-      Loki[Loki]
-    end
-
-    API -.metrics/logs.-> Prom
-    Worker -.metrics/logs.-> Prom
-    Prom --> Graf
-    API -.logs.-> Loki
-    Worker -.logs.-> Loki
+    User[Browser] -->|SSO login| KC[Keycloak]
+    User -->|HTTPS| FE[React SPA - Vite]
+    FE -->|Bearer token, axios| API[Django REST API]
+    API -->|introspect / userinfo| KC
+    API --> DB[(PostgreSQL)]
+    API -->|put_object| MinIO[(MinIO Object Storage)]
+    API -->|image_to_string| OCR[Tesseract OCR]
+    API -->|add_documents| Meili[(Meilisearch Index)]
+    API -->|every request| Audit[(Audit Log table)]
+    API -->|canvas.save| PDF[ReportLab PDF]
+    DB --> Metabase[Metabase Dashboards]
+    KC --> DB
 ```
 
-## 🔄 System Workflow
+Request flow for a document upload: the React SPA sends the file with a Keycloak-issued bearer token → `DocumentUploadView` validates it, pushes the file to MinIO, runs Tesseract OCR on it, creates the `Document` row in Postgres, indexes the OCR text in Meilisearch, and writes an `AuditLog` entry — all in one request.
 
-1. **User uploads a document** through the React frontend
-2. **FastAPI validates the request** and stores the file in object storage
-3. **A job is created and pushed** to the Redis queue
-4. **A Celery worker picks up the job** and begins processing
-5. **The OCR/AI pipeline extracts data** — preprocessing, detection, text/handwriting recognition, and structured extraction
-6. **Results are saved to PostgreSQL** and returned to the user
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Category | Tool |
-|:---|:---|
-| 🖥️ Frontend | React + Vite |
-| ⚙️ API Server | FastAPI |
-| 📨 Message Broker | Redis |
-| 🔄 Background Jobs | Celery |
-| 🧠 OCR / AI | OpenCV, YOLOv8, EasyOCR, TrOCR, LLM extraction |
-| 🗄️ Database | PostgreSQL |
-| 📦 Object Storage | OCI Object Storage (MinIO locally) |
-| 🐳 Containerization | Docker, Docker Compose |
-| 🚀 CI/CD | GitHub Actions |
-| 📊 Monitoring | Prometheus, Grafana, Loki |
-| ☁️ Frontend Hosting | Netlify / Cloudflare Pages |
+|---|---|
+| Frontend | React 18 (Vite), React Router, Axios, Tailwind CSS, react-hook-form |
+| Auth | Keycloak (OIDC), `keycloak-js`, `@react-keycloak/web`, `djangorestframework-simplejwt`, `python-keycloak` |
+| Backend | Django 4.2, Django REST Framework |
+| Database | PostgreSQL 15 |
+| Object Storage | MinIO |
+| Search | Meilisearch v1.3 |
+| OCR | Tesseract (`pytesseract`), Pillow, OpenCV |
+| PDF Reports | ReportLab |
+| Analytics | Metabase v0.46.6 |
+| Containerization | Docker, Docker Compose |
 
-## 💻 Local Development
+## Setup / Installation
 
-> **Prerequisites:** Docker and Docker Compose installed.
+> **Note:** `docker-compose.yml` currently has unresolved merge-conflict markers checked in. Resolve those before running the commands below (the two conflicting sides are identical, so it's a straightforward cleanup).
+
+### With Docker (recommended)
 
 ```bash
-git clone <repository-url>
-cd ai-document-understanding-system
-cp .env.example .env   # fill in secrets, never commit this file
+git clone https://github.com/Sohan-dsz/Cloud-Based-Naac-Data-Management-System.git
+cd Cloud-Based-Naac-Data-Management-System
+cp .env.example .env   # edit values as needed
 docker-compose up --build
 ```
 
-This starts six services together:
+In a second terminal, once the backend container is up:
 
-| Service | Role |
-|:---|:---|
-| `frontend` | React app |
-| `fastapi` | API server |
-| `redis` | Message broker / queue |
-| `worker` | Celery background processor |
-| `postgres` | Database |
-| `minio` | Local S3-compatible object storage (stands in for OCI in dev) |
-
-## 🚀 Deployment & CI/CD
-
-Every push to `main` triggers the GitHub Actions pipeline:
-
-```text
-Push Code → Run Tests (pytest) → Build Docker Images → Push to Registry → Deploy to Server (OCI) → Application Live
+```bash
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py createsuperuser
 ```
 
-The frontend deploys separately to Netlify or Cloudflare Pages; the backend services deploy as Docker containers to an OCI server.
+Then configure Keycloak:
+1. Open `http://localhost:8080`, log in with `admin` / `admin`
+2. Import `keycloak-realm-config.json` as the realm config
 
-## 📈 Monitoring & Logging
+Services once running:
 
-```text
-Application → Prometheus (Metrics) → Grafana (Dashboards) → Loki (Logs)
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5174 |
+| Backend API | http://localhost:8000 |
+| Keycloak | http://localhost:8080 |
+| MinIO Console | http://localhost:9001 |
+| Meilisearch | http://localhost:7700 |
+| Metabase | http://localhost:3001 |
+
+### Without Docker (local dev)
+
+**Backend**
+```bash
+cd backend
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
 ```
 
-Tracked continuously:
-- CPU / Memory usage
-- API latency
-- Error rate
-- Queue length
-- Uptime
+**Frontend**
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## 🎯 Why This Setup
+You'll still need Postgres, Keycloak, MinIO, and Meilisearch reachable at the hosts/ports set in your `.env` — the app doesn't run without them since `DocumentUploadView` talks to MinIO, Meilisearch, and Postgres directly.
 
-- **Fully containerized** — portable and scalable, every service isolated
-- **Asynchronous processing** — the API stays responsive while heavy OCR/AI work happens in the background
-- **Secure file storage** — originals and outputs live in object storage behind signed URLs, not the app server
-- **Production-ready** — CI/CD plus full observability, not just a local script
-- **Cost-efficient** — runs entirely on free/trial tiers of every service used
-- **Environment-based secrets** — nothing sensitive is hardcoded into the codebase
+## Usage Example
 
-## 👨‍💻 Author
+Upload a document (as an authenticated user):
+
+```bash
+curl -X POST http://localhost:8000/api/documents/documents/upload/ \
+  -H "Authorization: Bearer <access_token>" \
+  -F "title=Faculty Research Policy" \
+  -F "evidence_id=3" \
+  -F "file=@research_policy.pdf"
+```
+
+Response:
+
+```json
+{
+  "id": 12,
+  "title": "Faculty Research Policy",
+  "description": "",
+  "file_path": "research_innovations_extension/3/research_policy.pdf",
+  "file_size": 204800,
+  "mime_type": "application/pdf",
+  "evidence": {
+    "id": 3,
+    "title": "Research Policy Evidence",
+    "criteria": { "id": 3, "name": "research_innovations_extension", "description": "", "weightage": "10.00" },
+    "created_by": 1,
+    "created_at": "2026-09-11T08:12:00Z",
+    "updated_at": "2026-09-11T08:12:00Z",
+    "document_count": 1
+  },
+  "uploaded_by": "sohan",
+  "uploaded_at": "2026-09-11T08:14:22Z",
+  "version": 1,
+  "ocr_text": "...",
+  "is_approved": false,
+  "approved_by": null,
+  "approved_at": null
+}
+```
+
+Search indexed documents:
+
+```bash
+curl -H "Authorization: Bearer <access_token>" \
+  "http://localhost:8000/api/documents/documents/search/?q=research+policy"
+```
+
+Generate a criterion report (returns a PDF):
+
+```bash
+curl -H "Authorization: Bearer <access_token>" \
+  "http://localhost:8000/api/reports/naac/research_innovations_extension/" \
+  --output report.pdf
+```
+
+## Folder Structure
+
+```
+.
+├── backend/
+│   ├── apps/
+│   │   ├── authentication/   # User/Role models, Keycloak + JWT login
+│   │   ├── documents/        # Criteria, Evidence, Document, upload/search/approve
+│   │   ├── reports/          # PDF report generation (ReportLab)
+│   │   ├── audit/            # AuditLog model + request-logging middleware
+│   │   └── tasks/            # Task assignment (backend only, no UI yet)
+│   ├── naac_system/          # Django project settings, urls, wsgi/asgi
+│   ├── manage.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # Login, UploadForm, EvidenceDashboard, Analytics, ReportDownload
+│   │   ├── App.jsx           # Routes + Keycloak provider + axios interceptors
+│   │   └── main.jsx
+│   └── package.json
+├── config/
+│   ├── nginx.conf            # present, not wired into docker-compose.yml
+│   └── init-db.sql           # present, not wired into docker-compose.yml
+├── docker-compose.yml
+├── keycloak-realm-config.json
+└── .env.example
+```
+
+## Environment Variables
+
+From `.env.example`:
+
+| Variable | Description |
+|---|---|
+| `DJANGO_SETTINGS_MODULE` | Django settings module path |
+| `DEBUG` | Django debug mode |
+| `SECRET_KEY` | Django secret key |
+| `ALLOWED_HOSTS` | Comma-separated allowed hosts |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Main app database credentials |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | Main app database connection |
+| `KEYCLOAK_SERVER_URL` | Keycloak base URL |
+| `KEYCLOAK_REALM` | Keycloak realm name |
+| `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | Keycloak client credentials |
+| `MINIO_ENDPOINT` | MinIO host:port |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO credentials |
+| `MINIO_SECURE` | Whether to use HTTPS for MinIO |
+| `MINIO_BUCKET_NAME` | Bucket used for document storage |
+| `MEILISEARCH_URL` | Meilisearch base URL |
+| `MEILISEARCH_MASTER_KEY` | Meilisearch admin key |
+| `METABASE_URL` | Metabase base URL |
+| `CORS_ALLOWED_ORIGINS` | Allowed frontend origins |
+
+## Author
 
 **Sohan D Souza**
-
-Full Stack Developer • AI/ML Enthusiast
