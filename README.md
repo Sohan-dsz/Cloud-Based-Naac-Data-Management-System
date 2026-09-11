@@ -1,22 +1,17 @@
 <div align="center">
 
-# 🎓 NAAC Data Management & Accreditation Support System
+# 📄 AI-Powered Document Understanding System
 
-### A centralized, secure, cloud-ready platform for streamlining NAAC accreditation workflows
+### An asynchronous, containerized pipeline that turns uploaded documents into structured, searchable data
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)](#)
-[![Django](https://img.shields.io/badge/Django-REST%20Framework-092E20?style=for-the-badge&logo=django&logoColor=white)](#)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
-[![Keycloak](https://img.shields.io/badge/Keycloak-Auth-EF4444?style=for-the-badge&logo=keycloak&logoColor=white)](#)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#)
+[![React](https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white)](#)
+[![Celery](https://img.shields.io/badge/Celery-Async%20Jobs-37814A?style=for-the-badge&logo=celery&logoColor=white)](#)
+[![Redis](https://img.shields.io/badge/Redis-Broker-DC382D?style=for-the-badge&logo=redis&logoColor=white)](#)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
 
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](#)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#-contributing)
-[![Made with ❤](https://img.shields.io/badge/Made%20with-%E2%9D%A4-ff69b4?style=flat-square)](#)
-
-<br>
-
-Document storage&nbsp;•&nbsp;Role-based access&nbsp;•&nbsp;OCR-powered search&nbsp;•&nbsp;Analytics dashboards&nbsp;•&nbsp;Audit logging&nbsp;•&nbsp;Automated reports
+Document upload&nbsp;•&nbsp;Async OCR & AI extraction&nbsp;•&nbsp;Object storage&nbsp;•&nbsp;CI/CD&nbsp;•&nbsp;Observability
 
 </div>
 
@@ -24,421 +19,154 @@ Document storage&nbsp;•&nbsp;Role-based access&nbsp;•&nbsp;OCR-powered searc
 
 ## 📑 Table of Contents
 
+- [What This Does](#-what-this-does)
 - [Key Features](#-key-features)
-- [System Architecture](#️-system-architecture)
-- [Tech Stack](#️-tech-stack)
-- [Project Structure](#-project-structure)
-- [Quick Start](#-quick-start)
-- [Application URLs](#-application-urls)
-- [API Endpoints](#-api-endpoints)
+- [Architecture](#-architecture)
+- [System Workflow](#-system-workflow)
+- [Tech Stack](#-tech-stack)
 - [Local Development](#-local-development)
-- [Security Features](#-security-features)
-- [Production Deployment](#️-production-deployment)
-- [Future Enhancements](#-future-enhancements)
-- [Contributing](#-contributing)
+- [Deployment & CI/CD](#-deployment--cicd)
+- [Monitoring & Logging](#-monitoring--logging)
+- [Why This Setup](#-why-this-setup)
 - [Author](#-author)
 
 ---
 
+## 🧠 What This Does
+
+A user uploads a document through the React frontend. FastAPI validates it, stores the original in object storage, and pushes a processing job onto a Redis queue. A Celery worker picks the job up, runs it through an OCR/AI pipeline — OpenCV preprocessing, YOLOv8 field detection, EasyOCR for printed text, TrOCR for handwriting, and an LLM step for structured data extraction — and writes the results back to PostgreSQL. The frontend then polls for and displays the extracted data. The whole thing runs as a set of Docker containers, ships through a GitHub Actions CI/CD pipeline, and reports metrics and logs through Prometheus, Grafana, and Loki.
+
 ## ✨ Key Features
 
-<table>
-<tr>
-<td width="50%" valign="top">
+- **Async processing by design** — uploads return immediately; a Redis-backed Celery queue handles the actual OCR/AI work in the background so the API never blocks
+- **Multi-model extraction pipeline** — OpenCV for preprocessing, YOLOv8 for field/region detection, EasyOCR for printed text, TrOCR for handwritten content, and an LLM pass to turn raw OCR output into structured fields
+- **Object storage with signed URLs** — uploaded originals and processed outputs are stored in an OCI bucket, served back via signed URLs rather than direct public access
+- **Job status tracking** — PostgreSQL tracks users, jobs, results, and logs/metadata, so a client can poll a job until it completes
+- **Secrets kept out of the codebase** — all credentials and config are injected via `.env`, never hardcoded
+- **One-command local environment** — `docker-compose up` brings up the frontend, API, broker, worker, database, and local S3-compatible storage together
+- **CI/CD on every push** — GitHub Actions runs the test suite, builds Docker images, pushes to a registry, and deploys to the OCI server
+- **Full observability** — Prometheus scrapes metrics, Grafana visualizes them, Loki aggregates logs, covering CPU/memory, API latency, error rate, queue length, and uptime
+- **Runs entirely on free/trial tiers** — every service in the stack (OCI storage, Netlify/Cloudflare Pages hosting, GitHub Actions, Prometheus, Grafana) fits a generous free plan
 
-### 🔐 Authentication & Authorization
-- Keycloak-based Single Sign-On (SSO)
-- OIDC / JWT authentication
-- Role-Based Access Control (RBAC)
-- Multi-role support:
-  - 🧑‍💼 IQAC Admin
-  - 🏢 Department Admin
-  - 👨‍🏫 Faculty
-  - 🎓 Student
+## 🏗️ Architecture
 
-</td>
-<td width="50%" valign="top">
+```mermaid
+flowchart TD
+    User[User - Web Browser] -->|HTTPS| FE[React + Vite Frontend]
+    FE -->|Upload / Poll Results| API[FastAPI - API Server]
 
-### 📁 Document Management
-- Secure document uploads
-- Version control support
-- Department-wise organization
-- Criteria-wise evidence storage
-- Cloud object storage via MinIO
+    API -->|Auth, Upload, Job Mgmt| DB[(PostgreSQL)]
+    API -->|Store original file| Storage[(OCI Object Storage)]
+    API -->|Push job| Redis[(Redis - Message Broker)]
 
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
+    Redis -->|Fetch job| Worker[Celery Worker]
+    Worker -->|Preprocess + Detect + Extract| OCR[OCR / AI Service]
+    OCR -->|OpenCV preprocessing| OCR
+    OCR -->|YOLOv8 field detection| OCR
+    OCR -->|EasyOCR - printed text| OCR
+    OCR -->|TrOCR - handwriting| OCR
+    OCR -->|LLM data extraction| OCR
 
-### 🔍 Intelligent Search & Retrieval
-- OCR-powered text extraction
-- Full-text document indexing
-- Fast search with Meilisearch
-- Metadata-based filtering
+    Worker -->|Store results| DB
+    Worker -->|Store processed output| Storage
+    Worker -->|Update status| Redis
 
-</td>
-<td width="50%" valign="top">
+    API -->|Return results| FE
 
-### 📊 Analytics & Dashboards
-- Embedded Metabase dashboards
-- Accreditation progress tracking
-- Department performance analytics
-- Institutional insights & reports
+    subgraph Observability
+      Prom[Prometheus]
+      Graf[Grafana]
+      Loki[Loki]
+    end
 
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-### 📄 Automated Report Generation
-- Criterion-wise NAAC reports
-- Downloadable PDF reports
-- Evidence compilation support
-- Accreditation-ready documentation
-
-</td>
-<td width="50%" valign="top">
-
-### 📝 Audit Logging
-- Comprehensive user activity tracking
-- Document access monitoring
-- System-wide audit trails
-- Compliance & accountability support
-
-</td>
-</tr>
-</table>
-
----
-
-## 🏗️ System Architecture
-
-```text
-                     ┌──────────────────────┐
-                     │     React Frontend    │
-                     └──────────┬───────────┘
-                                │
-                                ▼
-                     ┌──────────────────────┐
-                     │   Django REST API     │
-                     └──────────┬───────────┘
-                                │
-        ┌───────────┬──────────┼──────────────┬─────────────┐
-        ▼            ▼          ▼              ▼             
-┌───────────────┐ ┌────────┐ ┌────────────┐ ┌────────┐       
-│  PostgreSQL    │ │Keycloak│ │Meilisearch │ │ MinIO  │       
-│  (Database)    │ │ (Auth) │ │ (Search)   │ │(Storage)│      
-└───────────────┘ └────────┘ └─────┬──────┘ └────────┘       
-                                    │
-                                    ▼
-                              ┌──────────┐
-                              │ Metabase │
-                              │(Analytics)│
-                              └──────────┘
+    API -.metrics/logs.-> Prom
+    Worker -.metrics/logs.-> Prom
+    Prom --> Graf
+    API -.logs.-> Loki
+    Worker -.logs.-> Loki
 ```
 
----
+## 🔄 System Workflow
+
+1. **User uploads a document** through the React frontend
+2. **FastAPI validates the request** and stores the file in object storage
+3. **A job is created and pushed** to the Redis queue
+4. **A Celery worker picks up the job** and begins processing
+5. **The OCR/AI pipeline extracts data** — preprocessing, detection, text/handwriting recognition, and structured extraction
+6. **Results are saved to PostgreSQL** and returned to the user
 
 ## 🛠️ Tech Stack
 
-<div align="center">
-
-| Layer | Technology |
+| Category | Tool |
 |:---|:---|
-| 🖥️ **Frontend** | React.js · Vite · Bootstrap |
-| ⚙️ **Backend** | Django · Django REST Framework |
-| 🗄️ **Database** | PostgreSQL |
-| 🔐 **Authentication** | Keycloak (OIDC / JWT) |
-| 📦 **Object Storage** | MinIO |
-| 🔎 **Search Engine** | Meilisearch |
-| 🔡 **OCR Processing** | Tesseract OCR |
-| 📈 **Analytics** | Metabase |
-| 🐳 **Containerization** | Docker · Docker Compose |
-| 🌳 **Version Control** | Git & GitHub |
-
-</div>
-
----
-
-## 📂 Project Structure
-
-```bash
-naac-data-management-system/
-│
-├── frontend/              # React + Vite client
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── backend/                # Django REST API
-│   ├── api/
-│   ├── documents/
-│   ├── reports/
-│   ├── users/
-│   └── manage.py
-│
-├── docker/                 # Docker configs
-├── docs/                   # Documentation
-├── uploads/                 # Local upload cache
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
-
----
-
-## 🚀 Quick Start
-
-> **Prerequisites:** Docker, Docker Compose, and Git installed and verified.
-> ```bash
-> docker --version
-> docker-compose --version
-> git --version
-> ```
-
-<details open>
-<summary><strong>Step 1 — Clone the repository</strong></summary>
-
-```bash
-git clone <repository-url>
-cd naac-data-management-system
-```
-</details>
-
-<details open>
-<summary><strong>Step 2 — Configure environment variables</strong></summary>
-
-```bash
-cp .env.example .env
-```
-Update the `.env` file with your required configuration values.
-</details>
-
-<details open>
-<summary><strong>Step 3 — Start all services</strong></summary>
-
-```bash
-docker-compose up --build
-```
-</details>
-
-<details open>
-<summary><strong>Step 4 — Apply database migrations</strong></summary>
-
-In a new terminal:
-```bash
-docker-compose exec backend python manage.py migrate
-```
-</details>
-
-<details open>
-<summary><strong>Step 5 — Create an admin user</strong></summary>
-
-```bash
-docker-compose exec backend python manage.py createsuperuser
-```
-</details>
-
-<details open>
-<summary><strong>Step 6 — Configure Keycloak</strong></summary>
-
-1. Open **http://localhost:8080**
-2. Sign in with the default credentials:
-   ```text
-   Username: admin
-   Password: admin
-   ```
-3. Import the realm config: `keycloak-realm-config.json`
-</details>
-
-<details open>
-<summary><strong>Step 7 — Configure Metabase</strong></summary>
-
-1. Open **http://localhost:3000**
-2. Connect Metabase to PostgreSQL
-3. Build your analytics dashboards
-</details>
-
----
-
-## 🌐 Application URLs
-
-| Service | URL |
-|:---|:---|
-| 🖥️ Frontend | http://localhost:3000 |
-| ⚙️ Backend API | http://localhost:8000 |
-| 🔐 Keycloak | http://localhost:8080 |
-| 📦 MinIO Console | http://localhost:9001 |
-| 🔎 Meilisearch | http://localhost:7700 |
-| 📈 Metabase | http://localhost:3000 |
-
----
-
-## 📚 API Endpoints
-
-<details>
-<summary><strong>🔐 Authentication</strong></summary>
-
-```http
-POST /api/auth/login/
-```
-</details>
-
-<details>
-<summary><strong>📁 Documents</strong></summary>
-
-```http
-GET  /api/documents/criteria/
-POST /api/documents/upload/
-GET  /api/documents/search/?q=<query>
-```
-</details>
-
-<details>
-<summary><strong>📄 Reports</strong></summary>
-
-```http
-GET /api/reports/naac/<criteria>/
-```
-</details>
-
----
+| 🖥️ Frontend | React + Vite |
+| ⚙️ API Server | FastAPI |
+| 📨 Message Broker | Redis |
+| 🔄 Background Jobs | Celery |
+| 🧠 OCR / AI | OpenCV, YOLOv8, EasyOCR, TrOCR, LLM extraction |
+| 🗄️ Database | PostgreSQL |
+| 📦 Object Storage | OCI Object Storage (MinIO locally) |
+| 🐳 Containerization | Docker, Docker Compose |
+| 🚀 CI/CD | GitHub Actions |
+| 📊 Monitoring | Prometheus, Grafana, Loki |
+| ☁️ Frontend Hosting | Netlify / Cloudflare Pages |
 
 ## 💻 Local Development
 
-<table>
-<tr>
-<td valign="top" width="50%">
-
-**Backend Setup**
-```bash
-cd backend
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-```
-
-</td>
-<td valign="top" width="50%">
-
-**Frontend Setup**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-</td>
-</tr>
-</table>
-
----
-
-## 🔒 Security Features
-
-✅ JWT Authentication&nbsp;&nbsp;|&nbsp;&nbsp;✅ Role-Based Access Control&nbsp;&nbsp;|&nbsp;&nbsp;✅ Secure Document Storage
-✅ Audit Logging&nbsp;&nbsp;|&nbsp;&nbsp;✅ Access Tracking&nbsp;&nbsp;|&nbsp;&nbsp;✅ API Protection&nbsp;&nbsp;|&nbsp;&nbsp;✅ Cloud Storage Integration
-
----
-
-## ☁️ Production Deployment
-
-### Infrastructure Recommendations
-- ☁️ AWS RDS for PostgreSQL
-- 🪣 AWS S3 for Object Storage
-- 🌐 NGINX Reverse Proxy
-- 🔒 SSL/TLS Certificates
-- 📊 Monitoring & Logging
-- 💾 Automated Backups
-
-### Deployment Checklist
-- [ ] Configure production environment variables
-- [ ] Enable HTTPS
-- [ ] Set up database backups
-- [ ] Configure monitoring
-- [ ] Enable centralized logging
-- [ ] Harden security settings
-
----
-
-## 🎯 Future Enhancements
-
-- 🤖 AI-powered accreditation recommendations
-- 📈 Advanced analytics and forecasting
-- 📱 Mobile application support
-- 🏫 Multi-institution deployment
-- ⚙️ Workflow automation
-- 📧 Email and notification services
-- ✅ Document approval workflows
-- 🔮 Accreditation score prediction
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here's how to get started:
+> **Prerequisites:** Docker and Docker Compose installed.
 
 ```bash
-# 1. Fork the repository
-
-# 2. Create a feature branch
-git checkout -b feature-name
-
-# 3. Commit your changes
-git commit -m "Add new feature"
-
-# 4. Push to your branch
-git push origin feature-name
-
-# 5. Open a Pull Request
+git clone <repository-url>
+cd ai-document-understanding-system
+cp .env.example .env   # fill in secrets, never commit this file
+docker-compose up --build
 ```
 
----
+This starts six services together:
+
+| Service | Role |
+|:---|:---|
+| `frontend` | React app |
+| `fastapi` | API server |
+| `redis` | Message broker / queue |
+| `worker` | Celery background processor |
+| `postgres` | Database |
+| `minio` | Local S3-compatible object storage (stands in for OCI in dev) |
+
+## 🚀 Deployment & CI/CD
+
+Every push to `main` triggers the GitHub Actions pipeline:
+
+```text
+Push Code → Run Tests (pytest) → Build Docker Images → Push to Registry → Deploy to Server (OCI) → Application Live
+```
+
+The frontend deploys separately to Netlify or Cloudflare Pages; the backend services deploy as Docker containers to an OCI server.
+
+## 📈 Monitoring & Logging
+
+```text
+Application → Prometheus (Metrics) → Grafana (Dashboards) → Loki (Logs)
+```
+
+Tracked continuously:
+- CPU / Memory usage
+- API latency
+- Error rate
+- Queue length
+- Uptime
+
+## 🎯 Why This Setup
+
+- **Fully containerized** — portable and scalable, every service isolated
+- **Asynchronous processing** — the API stays responsive while heavy OCR/AI work happens in the background
+- **Secure file storage** — originals and outputs live in object storage behind signed URLs, not the app server
+- **Production-ready** — CI/CD plus full observability, not just a local script
+- **Cost-efficient** — runs entirely on free/trial tiers of every service used
+- **Environment-based secrets** — nothing sensitive is hardcoded into the codebase
 
 ## 👨‍💻 Author
 
-<div align="center">
-
 **Sohan D Souza**
 
-Full Stack Developer&nbsp;•&nbsp;AI/ML Enthusiast&nbsp;•&nbsp;Salesforce Developer
-
-</div>
-
----
-
-<div align="center">
-
-## ⭐ Support
-
-If you found this project useful, consider giving it a **⭐ on GitHub** — it helps increase visibility and supports future development.
-
-</div>
-
-<details>
-<summary><strong>🏷️ GitHub Topics</strong></summary>
-
-```text
-naac
-naac-accreditation
-education-technology
-document-management
-react
-vite
-django
-django-rest-framework
-postgresql
-docker
-keycloak
-jwt-authentication
-minio
-meilisearch
-ocr
-metabase
-analytics-dashboard
-role-based-access-control
-full-stack-development
-cloud-computing
-```
-</details>
+Full Stack Developer • AI/ML Enthusiast
