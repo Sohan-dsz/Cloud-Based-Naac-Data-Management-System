@@ -1,171 +1,191 @@
-# NAAC Data Management & Accreditation Support System
+<div align="center">
 
-A Django + React platform for colleges to collect, store, search, and report on NAAC accreditation evidence.
+# 🎓 NAAC Data Management & Accreditation Support System
 
-## What this does
+### A Django + React platform for collecting, indexing, and reporting on NAAC accreditation evidence
 
-Institutions upload evidence documents (PDFs/images) against NAAC's seven accreditation criteria. The backend runs OCR on each file, stores the original in object storage, and indexes the extracted text for full-text search. IQAC/department admins can approve evidence and generate criterion-wise PDF reports. Every authenticated request is logged for audit purposes, and login/roles are handled through Keycloak SSO.
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=white)](#)
+[![Django](https://img.shields.io/badge/Django-4.2-092E20?style=for-the-badge&logo=django&logoColor=white)](#)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
+[![Keycloak](https://img.shields.io/badge/Keycloak-OIDC-EF4444?style=for-the-badge&logo=keycloak&logoColor=white)](#)
 
-## Key Features
+<br>
 
-- **Keycloak SSO** — OIDC login via `keycloak-js` on the frontend and token introspection on the backend, with JWT session tokens issued after login
-- **Role-based access** — four roles (IQAC Admin, Department Admin, Faculty, Student) enforced on the `Task` endpoints; other endpoints require authentication only
-- **Evidence & document upload** — files are stored in MinIO, OCR'd with Tesseract, and text-indexed in Meilisearch on upload
-- **Full-text document search** — queries Meilisearch and resolves hits back to `Document` rows
-- **Document approval workflow** — admins mark documents approved before they're included in generated reports
-- **Criterion-wise PDF reports** — generated on demand with ReportLab from approved documents
-- **Audit logging** — a middleware logs every authenticated request (path, IP, user agent), plus explicit log entries for uploads, searches, approvals, and report generation
-- **Task management (backend only)** — assignment and tracking of accreditation-related tasks, scoped by role; no frontend page consumes this yet
-- **Metabase dashboards** — Metabase is wired up against the same Postgres instance with Keycloak OIDC login, for ad hoc analytics
+Document upload & OCR&nbsp;•&nbsp;Full-text search&nbsp;•&nbsp;Role-based access&nbsp;•&nbsp;Approval workflow&nbsp;•&nbsp;Audit logging&nbsp;•&nbsp;PDF reports&nbsp;•&nbsp;Analytics dashboards
 
-## Architecture
+</div>
+
+---
+
+## 📑 Table of Contents
+
+- [What This Does](#-what-this-does)
+- [Key Features](#-key-features)
+- [System Architecture](#️-system-architecture)
+- [Document Upload Flow](#-document-upload-flow)
+- [Tech Stack](#️-tech-stack)
+- [Project Structure](#-project-structure)
+- [Quick Start](#-quick-start)
+- [Application URLs](#-application-urls)
+- [API Endpoints](#-api-endpoints)
+- [Local Development (No Docker)](#-local-development-no-docker)
+- [Environment Variables](#-environment-variables)
+- [Security Notes](#-security-notes)
+- [Known Limitations](#-known-limitations)
+- [Author](#-author)
+
+---
+
+## 🧠 What This Does
+
+Institutions upload evidence documents against NAAC's seven accreditation criteria. Django runs OCR on each upload, stores the original in MinIO, and indexes the extracted text in Meilisearch for full-text search. IQAC/department admins approve evidence and generate criterion-wise PDF reports. Every authenticated request is written to an audit log, and login/roles are handled through Keycloak SSO.
+
+---
+
+## ✨ Key Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔐 Authentication & Authorization
+- Keycloak-based SSO (OIDC)
+- JWT session tokens via `djangorestframework-simplejwt`
+- Four roles: IQAC Admin, Department Admin, Faculty, Student
+- Role-based permissions enforced on the Task endpoints
+
+</td>
+<td width="50%" valign="top">
+
+### 📁 Document Management
+- Criteria → Evidence → Document hierarchy
+- File uploads stored in MinIO object storage
+- Version field on each document
+- Approval workflow (admin sign-off before reporting)
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🔍 Search & OCR
+- Tesseract OCR runs on every upload
+- OCR text indexed into Meilisearch
+- Full-text search resolves hits back to document rows
+
+</td>
+<td width="50%" valign="top">
+
+### 📊 Reporting & Analytics
+- Criterion-wise PDF reports via ReportLab
+- Only approved documents included
+- Metabase dashboards on the same Postgres instance
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 📝 Audit Logging
+- Middleware logs every authenticated request
+- Explicit log entries for upload, search, approve, report actions
+- Tracks user, IP, and user agent
+
+</td>
+<td width="50%" valign="top">
+
+### ✅ Task Management (backend only)
+- Task model with assignment + status
+- Role-scoped visibility (admins see all, others see their own)
+- No frontend page consumes this yet
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ System Architecture
 
 ```mermaid
 flowchart TD
-    User[Browser] -->|SSO login| KC[Keycloak]
-    User -->|HTTPS| FE[React SPA - Vite]
-    FE -->|Bearer token, axios| API[Django REST API]
+    User(("👤 User")) -->|HTTPS| FE["⚛️ React SPA (Vite)"]
+    FE -->|SSO login| KC["🔐 Keycloak"]
+    FE -->|Bearer token, Axios| API["🐍 Django REST API"]
+
     API -->|introspect / userinfo| KC
-    API --> DB[(PostgreSQL)]
-    API -->|put_object| MinIO[(MinIO Object Storage)]
-    API -->|image_to_string| OCR[Tesseract OCR]
-    API -->|add_documents| Meili[(Meilisearch Index)]
-    API -->|every request| Audit[(Audit Log table)]
-    API -->|canvas.save| PDF[ReportLab PDF]
-    DB --> Metabase[Metabase Dashboards]
-    KC --> DB
+    API -->|ORM| DB[("🗄️ PostgreSQL")]
+    API -->|put_object| MinIO[("📦 MinIO")]
+    API -->|image_to_string| OCR["🔡 Tesseract OCR"]
+    API -->|add_documents| Meili[("🔎 Meilisearch")]
+    API -->|canvas.save| PDF["📄 ReportLab"]
+    API -->|every request| Audit[("📝 Audit Log")]
+
+    DB -.reads.-> Metabase["📈 Metabase"]
+    KC -.reads.-> DB
+
+    style FE fill:#61DAFB33,stroke:#61DAFB
+    style API fill:#092E2033,stroke:#092E20
+    style DB fill:#4169E133,stroke:#4169E1
+    style MinIO fill:#C7231933,stroke:#C72319
+    style Meili fill:#FF521233,stroke:#FF5212
+    style KC fill:#EF444433,stroke:#EF4444
 ```
 
-Request flow for a document upload: the React SPA sends the file with a Keycloak-issued bearer token → `DocumentUploadView` validates it, pushes the file to MinIO, runs Tesseract OCR on it, creates the `Document` row in Postgres, indexes the OCR text in Meilisearch, and writes an `AuditLog` entry — all in one request.
+---
 
-## Tech Stack
+## 🔄 Document Upload Flow
 
-| Category | Tool |
-|---|---|
-| Frontend | React 18 (Vite), React Router, Axios, Tailwind CSS, react-hook-form |
-| Auth | Keycloak (OIDC), `keycloak-js`, `@react-keycloak/web`, `djangorestframework-simplejwt`, `python-keycloak` |
-| Backend | Django 4.2, Django REST Framework |
-| Database | PostgreSQL 15 |
-| Object Storage | MinIO |
-| Search | Meilisearch v1.3 |
-| OCR | Tesseract (`pytesseract`), Pillow, OpenCV |
-| PDF Reports | ReportLab |
-| Analytics | Metabase v0.46.6 |
-| Containerization | Docker, Docker Compose |
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant FE as React SPA
+    participant API as Django API
+    participant M as MinIO
+    participant T as Tesseract
+    participant S as Meilisearch
+    participant DB as PostgreSQL
 
-## Setup / Installation
+    U->>FE: Select file + evidence
+    FE->>API: POST /api/documents/documents/upload/ (Bearer token)
+    API->>M: put_object(file)
+    API->>T: image_to_string(file)
+    T-->>API: OCR text
+    API->>DB: create Document row
+    API->>S: index(id, title, ocr_text, criteria)
+    API->>DB: create AuditLog("upload")
+    API-->>FE: 201 Document JSON
+    FE-->>U: Upload confirmed
+```
 
-> **Note:** `docker-compose.yml` currently has unresolved merge-conflict markers checked in. Resolve those before running the commands below (the two conflicting sides are identical, so it's a straightforward cleanup).
+---
 
-### With Docker (recommended)
+## 🛠️ Tech Stack
+
+<div align="center">
+
+| Layer | Technology |
+|:---|:---|
+| 🖥️ **Frontend** | React 18 · Vite · React Router · Axios · Tailwind CSS · react-hook-form |
+| 🔐 **Auth** | Keycloak (OIDC) · `keycloak-js` · `@react-keycloak/web` · SimpleJWT |
+| ⚙️ **Backend** | Django 4.2 · Django REST Framework · Python 3.11 |
+| 🗄️ **Database** | PostgreSQL 15 |
+| 📦 **Object Storage** | MinIO |
+| 🔎 **Search Engine** | Meilisearch v1.3 |
+| 🔡 **OCR** | Tesseract (`pytesseract`) · Pillow · OpenCV |
+| 📄 **PDF Reports** | ReportLab |
+| 📈 **Analytics** | Metabase v0.46.6 |
+| 🐳 **Containerization** | Docker · Docker Compose |
+
+</div>
+
+---
+
+## 📂 Project Structure
 
 ```bash
-git clone https://github.com/Sohan-dsz/Cloud-Based-Naac-Data-Management-System.git
-cd Cloud-Based-Naac-Data-Management-System
-cp .env.example .env   # edit values as needed
-docker-compose up --build
-```
-
-In a second terminal, once the backend container is up:
-
-```bash
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
-```
-
-Then configure Keycloak:
-1. Open `http://localhost:8080`, log in with `admin` / `admin`
-2. Import `keycloak-realm-config.json` as the realm config
-
-Services once running:
-
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5174 |
-| Backend API | http://localhost:8000 |
-| Keycloak | http://localhost:8080 |
-| MinIO Console | http://localhost:9001 |
-| Meilisearch | http://localhost:7700 |
-| Metabase | http://localhost:3001 |
-
-### Without Docker (local dev)
-
-**Backend**
-```bash
-cd backend
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-```
-
-**Frontend**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-You'll still need Postgres, Keycloak, MinIO, and Meilisearch reachable at the hosts/ports set in your `.env` — the app doesn't run without them since `DocumentUploadView` talks to MinIO, Meilisearch, and Postgres directly.
-
-## Usage Example
-
-Upload a document (as an authenticated user):
-
-```bash
-curl -X POST http://localhost:8000/api/documents/documents/upload/ \
-  -H "Authorization: Bearer <access_token>" \
-  -F "title=Faculty Research Policy" \
-  -F "evidence_id=3" \
-  -F "file=@research_policy.pdf"
-```
-
-Response:
-
-```json
-{
-  "id": 12,
-  "title": "Faculty Research Policy",
-  "description": "",
-  "file_path": "research_innovations_extension/3/research_policy.pdf",
-  "file_size": 204800,
-  "mime_type": "application/pdf",
-  "evidence": {
-    "id": 3,
-    "title": "Research Policy Evidence",
-    "criteria": { "id": 3, "name": "research_innovations_extension", "description": "", "weightage": "10.00" },
-    "created_by": 1,
-    "created_at": "2026-09-11T08:12:00Z",
-    "updated_at": "2026-09-11T08:12:00Z",
-    "document_count": 1
-  },
-  "uploaded_by": "sohan",
-  "uploaded_at": "2026-09-11T08:14:22Z",
-  "version": 1,
-  "ocr_text": "...",
-  "is_approved": false,
-  "approved_by": null,
-  "approved_at": null
-}
-```
-
-Search indexed documents:
-
-```bash
-curl -H "Authorization: Bearer <access_token>" \
-  "http://localhost:8000/api/documents/documents/search/?q=research+policy"
-```
-
-Generate a criterion report (returns a PDF):
-
-```bash
-curl -H "Authorization: Bearer <access_token>" \
-  "http://localhost:8000/api/reports/naac/research_innovations_extension/" \
-  --output report.pdf
-```
-
-## Folder Structure
-
-```
 .
 ├── backend/
 │   ├── apps/
@@ -174,7 +194,7 @@ curl -H "Authorization: Bearer <access_token>" \
 │   │   ├── reports/          # PDF report generation (ReportLab)
 │   │   ├── audit/            # AuditLog model + request-logging middleware
 │   │   └── tasks/            # Task assignment (backend only, no UI yet)
-│   ├── naac_system/          # Django project settings, urls, wsgi/asgi
+│   ├── naac_system/          # Django settings, urls, wsgi/asgi
 │   ├── manage.py
 │   └── requirements.txt
 ├── frontend/
@@ -191,30 +211,235 @@ curl -H "Authorization: Bearer <access_token>" \
 └── .env.example
 ```
 
-## Environment Variables
+---
+
+## 🚀 Quick Start
+
+> **Prerequisites:** Docker, Docker Compose, and Git.
+> ```bash
+> docker --version
+> docker-compose --version
+> git --version
+> ```
+>
+> ⚠️ `docker-compose.yml` currently has unresolved git merge-conflict markers checked in — resolve those before step 3 (both sides are identical, so it's a quick cleanup).
+
+<details open>
+<summary><strong>Step 1 — Clone the repository</strong></summary>
+
+```bash
+git clone https://github.com/Sohan-dsz/Cloud-Based-Naac-Data-Management-System.git
+cd Cloud-Based-Naac-Data-Management-System
+```
+</details>
+
+<details open>
+<summary><strong>Step 2 — Configure environment variables</strong></summary>
+
+```bash
+cp .env.example .env
+```
+Fill in the values — see [Environment Variables](#-environment-variables) below.
+</details>
+
+<details open>
+<summary><strong>Step 3 — Start all services</strong></summary>
+
+```bash
+docker-compose up --build
+```
+</details>
+
+<details open>
+<summary><strong>Step 4 — Apply database migrations</strong></summary>
+
+In a new terminal:
+```bash
+docker-compose exec backend python manage.py migrate
+```
+</details>
+
+<details open>
+<summary><strong>Step 5 — Create an admin user</strong></summary>
+
+```bash
+docker-compose exec backend python manage.py createsuperuser
+```
+</details>
+
+<details open>
+<summary><strong>Step 6 — Configure Keycloak</strong></summary>
+
+1. Open **http://localhost:8080**
+2. Sign in with `admin` / `admin`
+3. Import the realm config: `keycloak-realm-config.json`
+</details>
+
+<details open>
+<summary><strong>Step 7 — Connect Metabase</strong></summary>
+
+1. Open **http://localhost:3001**
+2. Connect Metabase to the `naac_db` PostgreSQL instance
+3. Build dashboards on top of `Document`, `Evidence`, and `AuditLog` tables
+</details>
+
+---
+
+## 🌐 Application URLs
+
+| Service | URL |
+|:---|:---|
+| 🖥️ Frontend | http://localhost:5174 |
+| ⚙️ Backend API | http://localhost:8000 |
+| 🔐 Keycloak | http://localhost:8080 |
+| 📦 MinIO Console | http://localhost:9001 |
+| 🔎 Meilisearch | http://localhost:7700 |
+| 📈 Metabase | http://localhost:3001 |
+
+---
+
+## 📚 API Endpoints
+
+<details>
+<summary><strong>🔐 Authentication</strong></summary>
+
+```http
+POST /api/auth/login/
+POST /api/auth/keycloak-login/
+GET  /api/auth/profile/
+GET  /api/auth/roles/
+```
+</details>
+
+<details>
+<summary><strong>📁 Documents</strong></summary>
+
+```http
+GET  /api/documents/criteria/
+GET  /api/documents/evidence/
+POST /api/documents/evidence/
+GET  /api/documents/documents/
+POST /api/documents/documents/upload/
+GET  /api/documents/documents/search/?q=<query>
+POST /api/documents/documents/<id>/approve/
+```
+</details>
+
+<details>
+<summary><strong>📄 Reports</strong></summary>
+
+```http
+GET /api/reports/naac/<criteria_name>/
+```
+</details>
+
+<details>
+<summary><strong>📝 Audit</strong></summary>
+
+```http
+GET /api/audit/logs/
+```
+</details>
+
+<details>
+<summary><strong>✅ Tasks</strong></summary>
+
+```http
+GET  /api/tasks/
+POST /api/tasks/
+GET  /api/tasks/<id>/
+GET  /api/tasks/my/
+```
+</details>
+
+---
+
+## 💻 Local Development (No Docker)
+
+<table>
+<tr>
+<td valign="top" width="50%">
+
+**Backend**
+```bash
+cd backend
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+</td>
+<td valign="top" width="50%">
+
+**Frontend**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+</td>
+</tr>
+</table>
+
+> You'll still need Postgres, Keycloak, MinIO, and Meilisearch reachable at the hosts/ports set in `.env` — `DocumentUploadView` talks to MinIO, Meilisearch, and Postgres directly on every upload.
+
+---
+
+## 🔧 Environment Variables
 
 From `.env.example`:
 
 | Variable | Description |
-|---|---|
+|:---|:---|
 | `DJANGO_SETTINGS_MODULE` | Django settings module path |
 | `DEBUG` | Django debug mode |
 | `SECRET_KEY` | Django secret key |
 | `ALLOWED_HOSTS` | Comma-separated allowed hosts |
-| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Main app database credentials |
-| `POSTGRES_HOST` / `POSTGRES_PORT` | Main app database connection |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | App database credentials |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | App database connection |
 | `KEYCLOAK_SERVER_URL` | Keycloak base URL |
 | `KEYCLOAK_REALM` | Keycloak realm name |
 | `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | Keycloak client credentials |
 | `MINIO_ENDPOINT` | MinIO host:port |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO credentials |
-| `MINIO_SECURE` | Whether to use HTTPS for MinIO |
+| `MINIO_SECURE` | Use HTTPS for MinIO |
 | `MINIO_BUCKET_NAME` | Bucket used for document storage |
 | `MEILISEARCH_URL` | Meilisearch base URL |
 | `MEILISEARCH_MASTER_KEY` | Meilisearch admin key |
 | `METABASE_URL` | Metabase base URL |
 | `CORS_ALLOWED_ORIGINS` | Allowed frontend origins |
 
-## Author
+---
+
+## 🔒 Security Notes
+
+✅ JWT Authentication &nbsp;|&nbsp; ✅ Keycloak Token Introspection &nbsp;|&nbsp; ✅ Role-Based Permissions (Tasks) &nbsp;|&nbsp; ✅ Per-Request Audit Logging
+
+Before deploying beyond local dev, at minimum:
+- Set `DEBUG=False` and a real, unique `SECRET_KEY`
+- Restrict `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` to your actual domains
+- Set `MINIO_SECURE=True` if MinIO/S3 is reachable over the network
+- Put a real `KEYCLOAK_CLIENT_SECRET` in place instead of the empty default
+
+---
+
+## ⚠️ Known Limitations
+
+- `docker-compose.yml` has unresolved git merge-conflict markers checked in (needs a manual fix before first run)
+- The `tasks` app has API endpoints and permissions but no corresponding frontend UI yet
+- `config/nginx.conf` and `config/init-db.sql` exist in the repo but aren't referenced by `docker-compose.yml`
+- No automated test suite or CI workflow is currently configured
+- No `LICENSE` file is present in the repo
+
+---
+
+## 👨‍💻 Author
+
+<div align="center">
 
 **Sohan D Souza**
+
+Full Stack Developer • AI/ML Enthusiast • Salesforce Developer
+
+</div>
